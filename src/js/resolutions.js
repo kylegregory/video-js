@@ -17,7 +17,6 @@ vjs.Player.prototype.changeResolution = function(new_source, new_resolution){
     // reload the new tech and the new source (mostly used to re-fire
     // the events we want)
     this.src(new_source);
-    
 
     // when the technology is re-started, kick off the new stream
     this.ready(function() {
@@ -39,21 +38,21 @@ vjs.Player.prototype.changeResolution = function(new_source, new_resolution){
  * @param {Object=} options
  * @constructor
  */
-vjs.Resolution = function(player, options, ready){
-  goog.base(this, player, options, ready);
+vjs.Resolution = vjs.Component.extend({
+  init: function(player, options, ready){
+    vjs.Component.call(this, player, options);
+    // Apply resolution info to resolution object
+    // Options will often be a resolution element
 
-  // Apply resolution info to resolution object
-  // Options will often be a resolution element
-
-  // Build ID if one doesn't exist
-  this.id_ = options['id'] || ('vjs_' + options['kind'] + '_' + options['language'] + '_' + vjs.guid++);
-  this.src_ = options['src'];
-  // 'default' is a reserved keyword in js so we use an abbreviated version
-  this.dflt_ = options['default'] || options['dflt'];
-  this.title_ = options['title'];
-  this.label_ = options['label'];
-};
-goog.inherits(vjs.Resolution, vjs.Component);
+    // Build ID if one doesn't exist
+    this.id_ = options['id'] || ('vjs_' + options['kind'] + '_' + options['language'] + '_' + vjs.guid++);
+    this.src_ = options['src'];
+    // 'default' is a reserved keyword in js so we use an abbreviated version
+    this.dflt_ = options['default'] || options['dflt'];
+    this.title_ = options['title'];
+    this.label_ = options['label'];
+  }
+});
 
 /**
  * Resoltuion kind value.
@@ -115,22 +114,22 @@ vjs.TextTrack.prototype.title = function(){
 
 /* Resolution Menu Items
 ================================================================================ */
-vjs.ResolutionMenuItem = function(player, options){
-  // Modify options for parent MenuItem class's init.
-  options['label'] = options.source['data-res'];
+vjs.ResolutionMenuItem = vjs.MenuItem.extend({
+  init: function(player, options){
+    // Modify options for parent MenuItem class's init.
+    options['label'] = options.source['data-res'];
+    vjs.MenuItem.call(this, player, options);
 
-  this.source = options.source['src'];
-  this.resolution = options.source['data-res'];
+    this.source = options.source['src'];
+    this.resolution = options.source['data-res'];
 
-  goog.base(this, player, options);
-
-  this.player_.one('loadstart', vjs.bind(this, this.update));
-  this.player_.on('resolutionchange', vjs.bind(this, this.update));
-};
-goog.inherits(vjs.ResolutionMenuItem, vjs.MenuItem);
+    this.player_.one('loadstart', vjs.bind(this, this.update));
+    this.player_.on('resolutionchange', vjs.bind(this, this.update));
+  }
+});
 
 vjs.ResolutionMenuItem.prototype.onClick = function(){
-  goog.base(this, 'onClick');
+  vjs.MenuItem.prototype.onClick.call(this);
   this.player_.changeResolution(this.source, this.resolution);
 };
 
@@ -145,21 +144,21 @@ vjs.ResolutionMenuItem.prototype.update = function(){
 
 /* Resolutions Button
 ================================================================================ */
-vjs.ResolutionButton = function(player, options) {
-  goog.base(this, player, options);
+vjs.ResolutionButton = vjs.Button.extend({
+  init: function(player, options) {
+    vjs.Button.call(this, player, options);
+    this.sourceResolutions_ = player.options_['sourceResolutions'];
+    var resolutions = this.sourceResolutions_ || [];
+    this.menu = this.createMenu();
 
-  this.sourceResolutions_ = player.options_['sourceResolutions'];
-  var resolutions = this.sourceResolutions_ || [];
-  this.menu = this.createMenu();
-
-  if (resolutions.length <= 1) {
-    this.hide();
+    if (resolutions.length <= 1) {
+      this.hide();
+    }
+    this.on('keyup', this.onKeyPress);
+    this.el_.setAttribute('aria-haspopup',true);
+    this.el_.setAttribute('role','button');
   }
-  this.on('keyup', this.onKeyPress);
-  this.el_.setAttribute('aria-haspopup',true);
-  this.el_.setAttribute('role','button');
-};
-goog.inherits(vjs.ResolutionButton, vjs.Button);
+});
 
 vjs.ResolutionButton.prototype.buttonPressed = false;
 
@@ -198,7 +197,7 @@ vjs.ResolutionButton.prototype.createItems = function(){
 };
 
 vjs.ResolutionButton.prototype.buildCSSClass = function(){
-  return this.className + ' vjs-menu-button ' + goog.base(this, 'buildCSSClass');
+  return this.className + ' vjs-menu-button ' + vjs.Button.prototype.buildCSSClass.call(this);
 };
 
 // Focus - Add keyboard functionality to element
@@ -269,15 +268,16 @@ vjs.ResolutionButton.prototype.unpressButton = function(){
     this.menu.unlockShowing();
     this.el_.setAttribute('aria-pressed',false);
 };
-
 /**
  * @constructor
  */
-vjs.ResolutionsButton = function(player, options, ready){
-  goog.base(this, player, options, ready);
-  this.el_.setAttribute('aria-label','Resolutions Menu');
-};
-goog.inherits(vjs.ResolutionsButton, vjs.ResolutionButton);
+vjs.ResolutionsButton = vjs.ResolutionButton.extend({
+  /** @constructor */
+  init: function(player, options, ready){
+    vjs.ResolutionButton.call(this, player, options, ready);
+    this.el_.setAttribute('aria-label','Resolutions Menu');
+  }
+});
 vjs.ResolutionsButton.prototype.kind_ = 'resolutions';
 vjs.ResolutionsButton.prototype.buttonText = 'Resolutions';
 vjs.ResolutionsButton.prototype.className = 'vjs-resolutions-button';

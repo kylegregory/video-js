@@ -43,7 +43,6 @@ vjs.Player = vjs.Component.extend({
         e.stopImmediatePropagation();
       }
     });
->>>>>>> upstream/master
 
     this.on('ended', this.onEnded);
     this.on('play', this.onPlay);
