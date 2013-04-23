@@ -834,7 +834,7 @@ vjs.Player.prototype.src = function(source){
       if (this.options_['autoplay']) {
         this.play();
       }
-    }  
+    }
   }
   // Pass source and resolution to player variables.
   this.source_ = source.src || null;
