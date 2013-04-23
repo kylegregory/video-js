@@ -167,9 +167,14 @@ vjs.fixEvent = function(event) {
   if (!event || !event.isPropagationStopped) {
     var old = event || window.event;
 
+    event = {};
     // Clone the old object so that we can modify the values event = {};
-    for (var prop in old) {
-      event[prop] = old[prop];
+    // IE8 Doesn't like when you mess with native event properties
+    // Firefox returns false for event.hasOwnProperty('type') and other props
+    //  which makes copying more difficult.
+    // TODO: Probably best to create a whitelist of event props
+    for (var key in old) {
+      event[key] = old[key];
     }
 
     // The event occurred on this element

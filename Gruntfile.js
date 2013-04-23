@@ -32,12 +32,12 @@ module.exports = function(grunt) {
     },
     minify: {
       source:{
-        src: ['build/files/combined.video.js'],
+        src: ['build/files/combined.video.js', 'build/compiler/goog.base.js', 'src/js/exports.js'],
         externs: ['src/js/media.flash.externs.js'],
         dest: 'build/files/minified.video.js'
       },
       tests: {
-        src: ['build/files/combined.video.js', 'test/unit/*.js'],
+        src: ['build/files/combined.video.js', 'build/compiler/goog.base.js', 'src/js/exports.js', 'test/unit/*.js', '!test/unit/api.js'],
         externs: ['src/js/media.flash.externs.js', 'test/qunit/qunit-externs.js'],
         dest: 'build/files/test.minified.video.js'
       }
@@ -45,7 +45,8 @@ module.exports = function(grunt) {
     dist: {},
     qunit: {
       source: ['test/index.html'],
-      minified: ['test/minified.html']
+      minified: ['test/minified.html'],
+      minified_api: ['test/minified-api.html']
     },
     watch: {
       files: [ 'src/**/*.js', 'test/unit/*.js' ],
@@ -64,7 +65,7 @@ module.exports = function(grunt) {
   grunt.registerTask('default', ['jshint', 'build', 'minify', 'dist']);
   // Development watch task
   grunt.registerTask('dev', ['jshint', 'build', 'qunit:source']);
-  grunt.registerTask('test', ['jshint', 'build', 'minify:tests', 'qunit']);
+  grunt.registerTask('test', ['jshint', 'build', 'minify', 'qunit']);
 
   var fs = require('fs'),
       gzip = require('zlib').gzip;
@@ -75,6 +76,7 @@ module.exports = function(grunt) {
     // Loading predefined source order from source-loader.js
     // Trust me, this is the easist way to do it so far.
     var blockSourceLoading = true;
+    var sourceFiles; // Needed to satisfy jshint
     eval(grunt.file.read('./build/source-loader.js'));
 
     // Fix windows file path delimiter issue
@@ -103,18 +105,18 @@ module.exports = function(grunt) {
     var done = this.async();
     var exec = require('child_process').exec;
 
-    var externs = this.file.externs || [];
-    var dest = this.file.dest;
+    var externs = this.files[0].externs || [];
+    var dest = this.files[0].dest;
     var files = [];
 
     // Make sure deeper directories exist for compiler
     grunt.file.write(dest, '');
 
-    if (this.data.sourcelist) {
-      files = files.concat(grunt.file.read(this.data.sourcelist).split(','));
+    if (this.files[0].sourcelist) {
+      files = files.concat(grunt.file.read(this.files[0].sourcelist).split(','));
     }
-    if (this.file.src) {
-      files = files.concat(this.file.src);
+    if (this.files[0].src) {
+      files = files.concat(this.files[0].src);
     }
 
     var command = 'java -jar build/compiler/compiler.jar'
@@ -122,7 +124,7 @@ module.exports = function(grunt) {
                 // + ' --formatting=pretty_print'
                 + ' --js_output_file=' + dest
                 + ' --create_source_map ' + dest + '.map --source_map_format=V3'
-                + ' --jscomp_warning=checkTypes --warning_level=VERBOSE';
+                + ' --jscomp_warning=checkTypes --warning_level=VERBOSE'
                 + ' --output_wrapper "(function() {%output%})();//@ sourceMappingURL=video.js.map"';
 
     files.forEach(function(file){

@@ -25,6 +25,7 @@ vjs.Player.prototype.changeResolution = function(new_source, new_resolution){
         this.currentTime(curTime);
       }));
       this.trigger('resolutionchange');
+      this.load();
       this.play();
       // remember this selection
       vjs.setLocalStorage('videojs_preferred_res', parseInt(new_source.index, 10));

@@ -10,6 +10,7 @@ Don't miss the [code style guide](#code-style).
 # Getting started
 
 1. [Download and install Node.js](http://nodejs.org/download/). Video.js uses Node for build and test automation.
+   There is a known issue between Node.js version 0.10.x and phantomjs.  This will manifest itself during the node module installation (see step 4 below).  For the time being, please install Node.js version 0.8.22 or earlier.  You can find earlier versions of Node.js [here](http://nodejs.org/dist/).
 
 2. [Fork](http://help.github.com/fork-a-repo/) and clone the video.js git repository.
 
@@ -96,7 +97,7 @@ Example:
 
 **[File a bug report](https://github.com/h5bp/html5-boilerplate/issues/)**
 
-### NOTE: Testing Flash Locall in Chrome
+### NOTE: Testing Flash Locally in Chrome
 Chrome 21+ (as of 2013/01/01) doens't run Flash files that are local and loaded into a locally accessed page (file:///). To get around this you need to [disable the version of Flash](http://helpx.adobe.com/flash-player/kb/flash-player-google-chrome.html#How_can_I_run_debugger_or_alternate_versions_of_Flash_Player_in_Google_Chrome) included with Chrome and enable a system-wide version of Flash.
 
 

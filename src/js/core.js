@@ -52,6 +52,7 @@ var vjs = function(id, options, ready){
 
 // Extended name, also available externally, window.videojs
 var videojs = vjs;
+window.videojs = window.vjs = vjs;
 
 // CDN Version. Used to target right flash swf.
 vjs.CDN_VERSION = 'GENERATED_CDN_VSN';
@@ -70,7 +71,7 @@ vjs.options = {
   // techOrder: ['flash','html5'],
 
   'html5': {},
-  'flash': { swf: vjs.ACCESS_PROTOCOL + 'vjs.zencdn.net/c/video-js.swf' },
+  'flash': { 'swf': vjs.ACCESS_PROTOCOL + 'vjs.zencdn.net/c/video-js.swf' },
 
   // Default of web browser is 300x150. Should rely on source width/height.
   'width': 300,

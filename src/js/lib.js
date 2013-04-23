@@ -1,3 +1,5 @@
+var hasOwnProp = Object.prototype.hasOwnProperty;
+
 /**
  * Creates an element and applies properties.
  * @param  {String=} tagName    Name of tag to be created.
@@ -8,7 +10,7 @@ vjs.createEl = function(tagName, properties){
   var el = document.createElement(tagName || 'div');
 
   for (var propName in properties){
-    if (properties.hasOwnProperty(propName)) {
+    if (hasOwnProp.call(properties, propName)) {
       //el[propName] = properties[propName];
       // Not remembering why we were checking for dash
       // but using setAttribute means you have to use getAttribute
@@ -43,8 +45,23 @@ vjs.capitalize = function(string){
  * @type {Object}
  */
 vjs.obj = {};
-vjs.obj.toString = Object.prototype.toString;
-vjs.obj.hasOwnProperty = Object.prototype.hasOwnProperty;
+
+/**
+ * Object.create shim for prototypal inheritance.
+ * https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Global_Objects/Object/create
+ * @param  {Object}   obj Object to use as prototype
+ */
+ vjs.obj.create = Object.create || function(obj){
+  //Create a new function called 'F' which is just an empty object.
+  function F() {}
+
+  //the prototype of the 'F' function should point to the
+  //parameter of the anonymous function.
+  F.prototype = obj;
+
+  //create a new constructor function based off of the 'F' function.
+  return new F();
+};
 
 /**
  * Loop through each property in an object and call a function
@@ -55,7 +72,7 @@ vjs.obj.hasOwnProperty = Object.prototype.hasOwnProperty;
  */
 vjs.obj.each = function(obj, fn, context){
   for (var key in obj) {
-    if (vjs.obj.hasOwnProperty.call(obj, key)) {
+    if (hasOwnProp.call(obj, key)) {
       fn.call(context || this, key, obj[key]);
     }
   }
@@ -70,7 +87,7 @@ vjs.obj.each = function(obj, fn, context){
 vjs.obj.merge = function(obj1, obj2){
   if (!obj2) { return obj1; }
   for (var key in obj2){
-    if (vjs.obj.hasOwnProperty.call(obj2, key)) {
+    if (hasOwnProp.call(obj2, key)) {
       obj1[key] = obj2[key];
     }
   }
@@ -94,12 +111,12 @@ vjs.obj.deepMerge = function(obj1, obj2){
   obj1 = vjs.obj.copy(obj1);
 
   for (key in obj2){
-    if (vjs.obj.hasOwnProperty.call(obj2, key)) {
+    if (hasOwnProp.call(obj2, key)) {
       val1 = obj1[key];
       val2 = obj2[key];
 
       // Check if both properties are pure objects and do a deep merge if so
-      if (vjs.obj.toString.call(val1) === objDef && vjs.obj.toString.call(val2) === objDef) {
+      if (vjs.obj.isPlain(val1) && vjs.obj.isPlain(val2)) {
         obj1[key] = vjs.obj.deepMerge(val1, val2);
       } else {
         obj1[key] = obj2[key];
@@ -116,6 +133,18 @@ vjs.obj.deepMerge = function(obj1, obj2){
  */
 vjs.obj.copy = function(obj){
   return vjs.obj.merge({}, obj);
+};
+
+/**
+ * Check if an object is plain, and not a dom node or any object sub-instance
+ * @param  {Object} obj Object to check
+ * @return {Boolean}     True if plain, false otherwise
+ */
+vjs.obj.isPlain = function(obj){
+  return !!obj
+    && typeof obj === 'object'
+    && obj.toString() === '[object Object]'
+    && obj.constructor === Object;
 };
 
 /**
@@ -254,7 +283,13 @@ vjs.addClass = function(element, classToAdd){
 vjs.removeClass = function(element, classToRemove){
   if (element.className.indexOf(classToRemove) == -1) { return; }
   var classNames = element.className.split(' ');
-  classNames.splice(classNames.indexOf(classToRemove),1);
+  // IE8 Does not support array.indexOf so using a for loop
+  for (var i = classNames.length - 1; i >= 0; i--) {
+    if (classNames[i] === classToRemove) {
+      classNames.splice(i,1);
+    }
+  }
+  // classNames.splice(classNames.indexOf(classToRemove),1);
   element.className = classNames.join(' ');
 };
 
@@ -347,16 +382,14 @@ vjs.getAttributeValues = function(tag){
  * @param  {String} strCssRule Style name
  * @return {String}            Style value
  */
-vjs.getComputedStyleValue = function(el, strCssRule){
+vjs.getComputedDimension = function(el, strCssRule){
   var strValue = '';
   if(document.defaultView && document.defaultView.getComputedStyle){
     strValue = document.defaultView.getComputedStyle(el, '').getPropertyValue(strCssRule);
 
   } else if(el.currentStyle){
-    strCssRule = strCssRule.replace(/\-(\w)/g, function (strMatch, p1){
-      return p1.toUpperCase();
-    });
-    strValue = el.currentStyle[strCssRule];
+    // IE8 Width/Height support
+    strValue = el['client'+strCssRule.substr(0,1).toUpperCase() + strCssRule.substr(1)] + 'px';
   }
   return strValue;
 };
