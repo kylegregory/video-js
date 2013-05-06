@@ -158,7 +158,7 @@ vjs.ResolutionButton.prototype.sourceResolutions_;
 
 vjs.ResolutionButton.prototype.sourceResolutions = function() {
   return this.sourceResolutions_;
-}
+};
 
 vjs.ResolutionButton.prototype.createItems = function(){
   var resolutions = this.sourceResolutions_ = this.player_.options_['sourceResolutions'];
