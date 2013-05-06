@@ -102,13 +102,13 @@ vjs.Resolution.prototype.dflt = function(){
  * Resoltuion title value
  * @private
  */
-vjs.TextTrack.prototype.title_;
+vjs.Resolution.prototype.title_;
 
 /**
  * Get the resolution title value
  * @return {String}
  */
-vjs.TextTrack.prototype.title = function(){
+vjs.Resolution.prototype.title = function(){
   return this.title_;
 };
 
@@ -147,46 +147,21 @@ vjs.ResolutionMenuItem.prototype.update = function(){
 vjs.ResolutionButton = vjs.MenuButton.extend({
   init: function(player, options) {
     vjs.MenuButton.call(this, player, options);
-    this.sourceResolutions_ = player.options_['sourceResolutions'];
-    var resolutions = this.sourceResolutions_ || [];
-    // this.menu = this.createMenu();
 
-    if (resolutions.length <= 1) {
+    if (this.items.length <= 1) {
       this.hide();
     }
-    // this.on('keyup', this.onKeyPress);
-    // this.el_.setAttribute('aria-haspopup',true);
-    // this.el_.setAttribute('role','button');
   }
 });
 
-// vjs.ResolutionButton.prototype.buttonPressed = false;
+vjs.ResolutionButton.prototype.sourceResolutions_;
 
-// vjs.ResolutionButton.prototype.createMenu = function() {
-//   var menu = new vjs.Menu(this.player_);
-
-//     // Add a title list item to the top
-//     menu.el_.appendChild(vjs.createEl('li', {
-//       className: 'vjs-menu-title',
-//       innerHTML: vjs.capitalize(this.kind_),
-//       tabindex: -1
-//     }));
-
-//     this.items = this.createItems();
-
-//     // Add menu items to the menu
-//     for (var i = 0; i < this.items.length; i++) {
-//       menu.addItem(this.items[i]);
-//     }
-
-//     // Add list to element
-//     this.addChild(menu);
-
-//     return menu;
-// };
+vjs.ResolutionButton.prototype.sourceResolutions = function() {
+  return this.sourceResolutions_;
+}
 
 vjs.ResolutionButton.prototype.createItems = function(){
-  var resolutions = this.sourceResolutions_ || [];
+  var resolutions = this.sourceResolutions_ = this.player_.options_['sourceResolutions'];
   var items = [];
   for (var i = 0; i < resolutions.length; i++) {
     items.push(new vjs.ResolutionMenuItem(this.player_, {
@@ -196,78 +171,6 @@ vjs.ResolutionButton.prototype.createItems = function(){
   return items;
 };
 
-// vjs.ResolutionButton.prototype.buildCSSClass = function(){
-//   return this.className + ' vjs-menu-button ' + vjs.Button.prototype.buildCSSClass.call(this);
-// };
-
-// // Focus - Add keyboard functionality to element
-// vjs.ResolutionButton.prototype.onFocus = function() {
-//   // This function is not needed anymore. Instead, the keyboard functionality is handled by
-//   // treating the button as triggering a submenu. When the button is pressed, the submenu
-//   // appears. Pressing the button again makes the submenu disappear.
-
-//   /*
-//   // Show the menu, and keep showing when the menu items are in focus
-//   this.menu.lockShowing();
-//   // this.menu.el_.style.display = 'block';
-
-//   // When tabbing through, the menu should hide when focus goes from the last menu item to the next tabbed element.
-//   vjs.one(this.menu.el_.childNodes[this.menu.el_.childNodes.length - 1], 'blur', vjs.bind(this, function(){
-//     this.menu.unlockShowing();
-//   }));
-//     */
-// };
-
-// // Can't turn off list display that we turned on with focus, because list would go away.
-// vjs.ResolutionButton.prototype.onBlur = function() {};
-
-// vjs.ResolutionButton.prototype.onClick = function(){
-//   // When you click the button it adds focus, which will show the menu indefinitely.
-//   // So we'll remove focus when the mouse leaves the button.
-//   // Focus is needed for tab navigation.
-//   this.one('mouseout', vjs.bind(this, function(){
-//     this.menu.unlockShowing();
-//     this.el_.blur();
-//   }));
-//   if (this.buttonPressed){
-//       this.unpressButton();
-//   } else {
-//       this.pressButton();
-//   }
-// };
-
-// vjs.ResolutionButton.prototype.onKeyPress = function(event){
-//   // Check for space bar (32) or enter (13) keys
-//   if (event.which == 32 || event.which == 13) {
-//       event.preventDefault();
-//       if (this.buttonPressed){
-//           this.unpressButton();
-//       } else {
-//           this.pressButton();
-//       }
-//   }
-
-//   // Check for escape (27) key
-//   if (event.which == 27){
-//       event.preventDefault();
-//       if (this.buttonPressed){
-//           this.unpressButton();
-//       }
-//   }
-// };
-
-// vjs.ResolutionButton.prototype.pressButton = function(){
-//     this.buttonPressed = true;
-//     this.menu.lockShowing();
-//     this.el_.setAttribute('aria-pressed',true);
-//     this.el_.children[1].children[0].focus(); // set the focus to the title of the submenu
-// };
-
-// vjs.ResolutionButton.prototype.unpressButton = function(){
-//     this.buttonPressed = false;
-//     this.menu.unlockShowing();
-//     this.el_.setAttribute('aria-pressed',false);
-// };
 /**
  * @constructor
  */
