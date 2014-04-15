@@ -1,5 +1,7 @@
 /**
- * Seek, Load Progress, and Play Progress
+ * The Progress Control component contains the seek bar, load progress,
+ * and play progress
+ *
  * @param {vjs.Player|Object} player
  * @param {Object=} options
  * @constructor
@@ -25,6 +27,7 @@ vjs.ProgressControl.prototype.createEl = function(){
 
 /**
  * Seek Bar and holder for the progress bars
+ *
  * @param {vjs.Player|Object} player
  * @param {Object=} options
  * @constructor
@@ -106,7 +109,8 @@ vjs.SeekBar.prototype.stepBack = function(){
 
 
 /**
- * Shows load progres
+ * Shows load progress
+ *
  * @param {vjs.Player|Object} player
  * @param {Object=} options
  * @constructor
@@ -133,6 +137,7 @@ vjs.LoadProgressBar.prototype.update = function(){
 
 /**
  * Shows play progress
+ *
  * @param {vjs.Player|Object} player
  * @param {Object=} options
  * @constructor
@@ -152,20 +157,37 @@ vjs.PlayProgressBar.prototype.createEl = function(){
 };
 
 /**
- * SeekBar component includes play progress bar, and seek handle
- * Needed so it can determine seek position based on handle position/size
+ * The Seek Handle shows the current position of the playhead during playback,
+ * and can be dragged to adjust the playhead.
+ *
  * @param {vjs.Player|Object} player
  * @param {Object=} options
  * @constructor
  */
-vjs.SeekHandle = vjs.SliderHandle.extend();
+vjs.SeekHandle = vjs.SliderHandle.extend({
+  init: function(player, options) {
+    vjs.SliderHandle.call(this, player, options);
+    player.on('timeupdate', vjs.bind(this, this.updateContent));
+  }
+});
 
-/** @inheritDoc */
+/**
+ * The default value for the handle content, which may be read by screen readers
+ *
+ * @type {String}
+ * @private
+ */
 vjs.SeekHandle.prototype.defaultValue = '00:00';
 
 /** @inheritDoc */
-vjs.SeekHandle.prototype.createEl = function(){
+vjs.SeekHandle.prototype.createEl = function() {
   return vjs.SliderHandle.prototype.createEl.call(this, 'div', {
-    className: 'vjs-seek-handle'
+    className: 'vjs-seek-handle',
+    'aria-live': 'off'
   });
+};
+
+vjs.SeekHandle.prototype.updateContent = function() {
+  var time = (this.player_.scrubbing) ? this.player_.getCache().currentTime : this.player_.currentTime();
+  this.el_.innerHTML = '<span class="vjs-control-text">' + vjs.formatTime(time, this.player_.duration()) + '</span>';
 };

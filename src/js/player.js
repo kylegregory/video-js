@@ -1,14 +1,39 @@
 /**
- * Main player class. A player instance is returned by _V_(id);
- * @param {Element} tag        The original video tag used for configuring options
- * @param {Object=} options    Player options
- * @param {Function=} ready    Ready callback function
- * @constructor
+ * An instance of the `vjs.Player` class is created when any of the Video.js setup methods are used to initialize a video.
+ *
+ * ```js
+ * var myPlayer = videojs('example_video_1');
+ * ```
+ *
+ * In the follwing example, the `data-setup` attribute tells the Video.js library to create a player instance when the library is ready.
+ *
+ * ```html
+ * <video id="example_video_1" data-setup='{}' controls>
+ *   <source src="my-source.mp4" type="video/mp4">
+ * </video>
+ * ```
+ *
+ * After an instance has been created it can be accessed globally using `Video('example_video_1')`.
+ *
+ * @class
+ * @extends vjs.Component
  */
 vjs.Player = vjs.Component.extend({
-  /** @constructor */
+
+  /**
+   * player's constructor function
+   *
+   * @constructs
+   * @method init
+   * @param {Element} tag        The original video tag used for configuring options
+   * @param {Object=} options    Player options
+   * @param {Function=} ready    Ready callback function
+   */
   init: function(tag, options, ready){
     this.tag = tag; // Store the original tag used to set options
+
+    // Make sure tag ID exists
+    tag.id = tag.id || 'vjs_video_' + vjs.guid++;
 
     // Set Options
     // The options argument overrides options set in the video tag
@@ -24,36 +49,35 @@ vjs.Player = vjs.Component.extend({
     this.poster_ = options['poster'];
     // Set controls
     this.controls_ = options['controls'];
-    // Use native controls for iOS and Android by default
-    //  until controls are more stable on those devices.
-    if (options['customControlsOnMobile'] !== true && (vjs.IS_IOS || vjs.IS_ANDROID)) {
-      tag.controls = options['controls'];
-      this.controls_ = false;
-    } else {
-      // Original tag settings stored in options
-      // now remove immediately so native controls don't flash.
-      tag.controls = false;
-    }
+    // Original tag settings stored in options
+    // now remove immediately so native controls don't flash.
+    // May be turned back on by HTML5 tech if nativeControlsForTouch is true
+    tag.controls = false;
+
+    // we don't want the player to report touch activity on itself
+    // see enableTouchActivity in Component
+    options.reportTouchActivity = false;
 
     // Run base component initializing with new options.
     // Builds the element through createEl()
     // Inits and embeds any child components in opts
     vjs.Component.call(this, this, options, ready);
 
-    // Firstplay event implimentation. Not sold on the event yet.
-    // Could probably just check currentTime==0?
-    this.one('play', function(e){
-      var fpEvent = { type: 'firstplay', target: this.el_ };
-      // Using vjs.trigger so we can check if default was prevented
-      var keepGoing = vjs.trigger(this.el_, fpEvent);
+    // Update controls className. Can't do this when the controls are initially
+    // set because the element doesn't exist yet.
+    if (this.controls()) {
+      this.addClass('vjs-controls-enabled');
+    } else {
+      this.addClass('vjs-controls-disabled');
+    }
 
-      if (!keepGoing) {
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-      }
-    });
+    // TODO: Make this smarter. Toggle user state between touching/mousing
+    // using events, since devices can have both touch and mouse events.
+    // if (vjs.TOUCH_ENABLED) {
+    //   this.addClass('vjs-touch-enabled');
+    // }
 
+    this.on('loadstart', this.onLoadStart);
     this.on('ended', this.onEnded);
     this.on('play', this.onPlay);
     this.on('firstplay', this.onFirstPlay);
@@ -71,6 +95,8 @@ vjs.Player = vjs.Component.extend({
         this[key](val);
       }, this);
     }
+
+    this.listenForUserActivity();
   }
 });
 
@@ -85,8 +111,18 @@ vjs.Player = vjs.Component.extend({
  */
 vjs.Player.prototype.options_ = vjs.options;
 
+/**
+ * Destroys the video player and does any necessary cleanup
+ *
+ *     myPlayer.dispose();
+ *
+ * This is especially helpful if you are dynamically adding and removing videos
+ * to/from the DOM.
+ */
 vjs.Player.prototype.dispose = function(){
-  // this.isReady_ = false;
+  this.trigger('dispose');
+  // prevent dispose from being called twice
+  this.off('dispose');
 
   // Kill reference to this player
   vjs.players[this.id_] = null;
@@ -113,22 +149,18 @@ vjs.Player.prototype.getTagSettings = function(tag){
 
   // Get tag children settings
   if (tag.hasChildNodes()) {
-    var child, childName,
-        children = tag.childNodes,
-        i = 0,
-        j = children.length;
+    var children, child, childName, i, j;
 
-    for (; i < j; i++) {
+    children = tag.childNodes;
+
+    for (i=0,j=children.length; i<j; i++) {
       child = children[i];
       // Change case needed: http://ejohn.org/blog/nodename-case-sensitivity/
       childName = child.nodeName.toLowerCase();
-
       if (childName === 'source') {
         options['sources'].push(vjs.getAttributeValues(child));
-
       } else if (childName === 'track') {
         options['tracks'].push(vjs.getAttributeValues(child));
-
       }
     }
   }
@@ -143,21 +175,29 @@ vjs.Player.prototype.createEl = function(){
   // Remove width/height attrs from tag so CSS can make it 100% width/height
   tag.removeAttribute('width');
   tag.removeAttribute('height');
-  // Empty video tag sources and tracks so the built-in player doesn't use them also.
+  // Empty video tag tracks so the built-in player doesn't use them also.
   // This may not be fast enough to stop HTML5 browsers from reading the tags
   // so we'll need to turn off any default tracks if we're manually doing
   // captions and subtitles. videoElement.textTracks
   if (tag.hasChildNodes()) {
-    var nrOfChildNodes = tag.childNodes.length;
-    for (var i=0,j=tag.childNodes;i<nrOfChildNodes;i++) {
-      if (j[0].nodeName.toLowerCase() == 'source' || j[0].nodeName.toLowerCase() == 'track') {
-        tag.removeChild(j[0]);
+    var nodes, nodesLength, i, node, nodeName, removeNodes;
+
+    nodes = tag.childNodes;
+    nodesLength = nodes.length;
+    removeNodes = [];
+
+    while (nodesLength--) {
+      node = nodes[nodesLength];
+      nodeName = node.nodeName.toLowerCase();
+      if (nodeName === 'track') {
+        removeNodes.push(node);
       }
     }
-  }
 
-  // Make sure tag ID exists
-  tag.id = tag.id || 'vjs_video_' + vjs.guid++;
+    for (i=0; i<removeNodes.length; i++) {
+      tag.removeChild(removeNodes[i]);
+    }
+  }
 
   // Give video tag ID and class to player div
   // ID will now reference player box, not the video tag
@@ -198,12 +238,11 @@ vjs.Player.prototype.loadTech = function(techName, source){
   // Pause and remove current playback technology
   if (this.tech) {
     this.unloadTech();
+  }
 
-  // If the first time loading, HTML5 tag will exist but won't be initialized
-  // So we need to remove it if we're not loading HTML5
-  } else if (techName !== 'Html5' && this.tag) {
-    this.el_.removeChild(this.tag);
-    this.tag.player = null;
+  // get rid of the HTML5 video tag as soon as we are using another tech
+  if (techName !== 'Html5' && this.tag) {
+    vjs.Html5.disposeMediaElement(this.tag);
     this.tag = null;
   }
 
@@ -216,12 +255,12 @@ vjs.Player.prototype.loadTech = function(techName, source){
     this.player_.triggerReady();
 
     // Manually track progress in cases where the browser/flash player doesn't report it.
-    if (!this.features.progressEvents) {
+    if (!this.features['progressEvents']) {
       this.player_.manualProgressOn();
     }
 
     // Manually track timeudpates in cases where the browser/flash player doesn't report it.
-    if (!this.features.timeupdateEvents) {
+    if (!this.features['timeupdateEvents']) {
       this.player_.manualTimeUpdatesOn();
     }
   };
@@ -286,7 +325,7 @@ vjs.Player.prototype.manualProgressOn = function(){
   this.tech.one('progress', function(){
 
     // Update known progress support for this playback technology
-    this.features.progressEvents = true;
+    this.features['progressEvents'] = true;
 
     // Turn off manual progress tracking
     this.player_.manualProgressOff();
@@ -314,7 +353,7 @@ vjs.Player.prototype.trackProgress = function(){
 };
 vjs.Player.prototype.stopTrackingProgress = function(){ clearInterval(this.progressInterval); };
 
-/* Time Tracking -------------------------------------------------------------- */
+/*! Time Tracking -------------------------------------------------------------- */
 vjs.Player.prototype.manualTimeUpdatesOn = function(){
   this.manualTimeUpdates = true;
 
@@ -325,7 +364,7 @@ vjs.Player.prototype.manualTimeUpdatesOn = function(){
   // Watch for native timeupdate event
   this.tech.one('timeupdate', function(){
     // Update known progress support for this playback technology
-    this.features.timeupdateEvents = true;
+    this.features['timeupdateEvents'] = true;
     // Turn off manual progress tracking
     this.player_.manualTimeUpdatesOff();
   });
@@ -350,31 +389,101 @@ vjs.Player.prototype.stopTrackingCurrentTime = function(){ clearInterval(this.cu
 
 // /* Player event handlers (how the player reacts to certain events)
 // ================================================================================ */
-vjs.Player.prototype.onEnded = function(){
-  if (this.options_['loop']) {
-    this.currentTime(0);
-    this.play();
-  }
+
+/**
+ * Fired when the user agent begins looking for media data
+ * @event loadstart
+ */
+vjs.Player.prototype.onLoadStart = function() {
+  // remove any first play listeners that weren't triggered from a previous video.
+  this.off('play', initFirstPlay);
+  this.one('play', initFirstPlay);
+
+  vjs.removeClass(this.el_, 'vjs-has-started');
 };
 
+ // Need to create this outside the scope of onLoadStart so it
+ // can be added and removed (to avoid piling first play listeners).
+function initFirstPlay(e) {
+  var fpEvent = { type: 'firstplay', target: this.el_ };
+  // Using vjs.trigger so we can check if default was prevented
+  var keepGoing = vjs.trigger(this.el_, fpEvent);
+
+  if (!keepGoing) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+  }
+}
+
+/**
+ * Fired when the player has initial duration and dimension information
+ * @event loadedmetadata
+ */
+vjs.Player.prototype.onLoadedMetaData;
+
+/**
+ * Fired when the player has downloaded data at the current playback position
+ * @event loadeddata
+ */
+vjs.Player.prototype.onLoadedData;
+
+/**
+ * Fired when the player has finished downloading the source data
+ * @event loadedalldata
+ */
+vjs.Player.prototype.onLoadedAllData;
+
+/**
+ * Fired whenever the media begins or resumes playback
+ * @event play
+ */
 vjs.Player.prototype.onPlay = function(){
   vjs.removeClass(this.el_, 'vjs-paused');
   vjs.addClass(this.el_, 'vjs-playing');
 };
 
+/**
+ * Fired the first time a video is played
+ *
+ * Not part of the HLS spec, and we're not sure if this is the best
+ * implementation yet, so use sparingly. If you don't have a reason to
+ * prevent playback, use `myPlayer.one('play');` instead.
+ *
+ * @event firstplay
+ */
 vjs.Player.prototype.onFirstPlay = function(){
     //If the first starttime attribute is specified
     //then we will start at the given offset in seconds
     if(this.options_['starttime']){
       this.currentTime(this.options_['starttime']);
     }
+
+    this.addClass('vjs-has-started');
 };
 
+/**
+ * Fired whenever the media has been paused
+ * @event pause
+ */
 vjs.Player.prototype.onPause = function(){
   vjs.removeClass(this.el_, 'vjs-playing');
   vjs.addClass(this.el_, 'vjs-paused');
 };
 
+/**
+ * Fired when the current playback position has changed
+ *
+ * During playback this is fired every 15-250 milliseconds, depnding on the
+ * playback technology in use.
+ * @event timeupdate
+ */
+vjs.Player.prototype.onTimeUpdate;
+
+/**
+ * Fired while the user agent is downloading media data
+ * @event progress
+ */
 vjs.Player.prototype.onProgress = function(){
   // Add custom event for when source is finished downloading.
   if (this.bufferedPercent() == 1) {
@@ -382,22 +491,64 @@ vjs.Player.prototype.onProgress = function(){
   }
 };
 
-// Update duration with durationchange event
-// Allows for cacheing value instead of asking player each time.
+/**
+ * Fired when the end of the media resource is reached (currentTime == duration)
+ * @event ended
+ */
+vjs.Player.prototype.onEnded = function(){
+  if (this.options_['loop']) {
+    this.currentTime(0);
+    this.play();
+  }
+};
+
+/**
+ * Fired when the duration of the media resource is first known or changed
+ * @event durationchange
+ */
 vjs.Player.prototype.onDurationChange = function(){
-  this.duration(this.techGet('duration'));
+  // Allows for cacheing value instead of asking player each time.
+  // We need to get the techGet response and check for a value so we don't
+  // accidentally cause the stack to blow up.
+  var duration = this.techGet('duration');
+  if (duration) {
+    if (duration < 0) {
+      duration = Infinity;
+    }
+    this.duration(duration);
+    // Determine if the stream is live and propagate styles down to UI.
+    if (duration === Infinity) {
+      this.addClass('vjs-live');
+    } else {
+      this.removeClass('vjs-live');
+    }
+  }
 };
 
-vjs.Player.prototype.onError = function(e) {
-  vjs.log('Video Error', e);
-};
+/**
+ * Fired when the volume changes
+ * @event volumechange
+ */
+vjs.Player.prototype.onVolumeChange;
 
-vjs.Player.prototype.onFullscreenChange = function(e) {
-  if (this.isFullScreen) {
+/**
+ * Fired when the player switches in or out of fullscreen mode
+ * @event fullscreenchange
+ */
+vjs.Player.prototype.onFullscreenChange = function() {
+  if (this.isFullScreen()) {
     this.addClass('vjs-fullscreen');
   } else {
     this.removeClass('vjs-fullscreen');
   }
+};
+
+/**
+ * Fired when there is an error in playback
+ * @event error
+ */
+vjs.Player.prototype.onError = function(e) {
+  vjs.log('Video Error', e);
 };
 
 // /* Player API
@@ -416,7 +567,7 @@ vjs.Player.prototype.getCache = function(){
 // Pass values to the playback tech
 vjs.Player.prototype.techCall = function(method, arg){
   // If it's not ready yet, call method when it is
-  if (this.tech && this.tech.isReady_) {
+  if (this.tech && !this.tech.isReady_) {
     this.tech.ready(function(){
       this[method](arg);
     });
@@ -435,12 +586,7 @@ vjs.Player.prototype.techCall = function(method, arg){
 // Get calls can't wait for the tech, and sometimes don't need to.
 vjs.Player.prototype.techGet = function(method){
 
-  // Make sure there is a tech
-  // if (!this.tech) {
-  //   return;
-  // }
-
-  if (this.tech.isReady_) {
+  if (this.tech && this.tech.isReady_) {
 
     // Flash likes to die and reload when you hide or reposition it.
     // In these cases the object methods go away and we get errors.
@@ -468,61 +614,100 @@ vjs.Player.prototype.techGet = function(method){
 };
 
 /**
- * Start media playback
- * http://dev.w3.org/html5/spec/video.html#dom-media-play
- * We're triggering the 'play' event here instead of relying on the
- * media element to allow using event.preventDefault() to stop
- * play from happening if desired. Usecase: preroll ads.
+ * start media playback
+ *
+ *     myPlayer.play();
+ *
+ * @return {vjs.Player} self
  */
 vjs.Player.prototype.play = function(){
   this.techCall('play');
   return this;
 };
 
-// http://dev.w3.org/html5/spec/video.html#dom-media-pause
+/**
+ * Pause the video playback
+ *
+ *     myPlayer.pause();
+ *
+ * @return {vjs.Player} self
+ */
 vjs.Player.prototype.pause = function(){
   this.techCall('pause');
   return this;
 };
 
-// http://dev.w3.org/html5/spec/video.html#dom-media-paused
-// The initial state of paused should be true (in Safari it's actually false)
+/**
+ * Check if the player is paused
+ *
+ *     var isPaused = myPlayer.paused();
+ *     var isPlaying = !myPlayer.paused();
+ *
+ * @return {Boolean} false if the media is currently playing, or true otherwise
+ */
 vjs.Player.prototype.paused = function(){
+  // The initial state of paused should be true (in Safari it's actually false)
   return (this.techGet('paused') === false) ? false : true;
 };
 
-// http://dev.w3.org/html5/spec/video.html#dom-media-currenttime
+/**
+ * Get or set the current time (in seconds)
+ *
+ *     // get
+ *     var whereYouAt = myPlayer.currentTime();
+ *
+ *     // set
+ *     myPlayer.currentTime(120); // 2 minutes into the video
+ *
+ * @param  {Number|String=} seconds The time to seek to
+ * @return {Number}        The time in seconds, when not setting
+ * @return {vjs.Player}    self, when the current time is set
+ */
 vjs.Player.prototype.currentTime = function(seconds){
   if (seconds !== undefined) {
 
-    // Cache the last set value for smoother scrubbing.
-    this.cache_.lastSetCurrentTime = seconds;
-
     this.techCall('setCurrentTime', seconds);
 
-    // Improve the accuracy of manual timeupdates
+    // improve the accuracy of manual timeupdates
     if (this.manualTimeUpdates) { this.trigger('timeupdate'); }
 
     return this;
   }
 
-  // Cache last currentTime and return
-  // Default to 0 seconds
+  // cache last currentTime and return. default to 0 seconds
+  //
+  // Caching the currentTime is meant to prevent a massive amount of reads on the tech's
+  // currentTime when scrubbing, but may not provide much performace benefit afterall.
+  // Should be tested. Also something has to read the actual current time or the cache will
+  // never get updated.
   return this.cache_.currentTime = (this.techGet('currentTime') || 0);
 };
 
-// http://dev.w3.org/html5/spec/video.html#dom-media-duration
-// Duration should return NaN if not available. ParseFloat will turn false-ish values to NaN.
+/**
+ * Get the length in time of the video in seconds
+ *
+ *     var lengthOfVideo = myPlayer.duration();
+ *
+ * **NOTE**: The video must have started loading before the duration can be
+ * known, and in the case of Flash, may not be known until the video starts
+ * playing.
+ *
+ * @return {Number} The duration of the video in seconds
+ */
 vjs.Player.prototype.duration = function(seconds){
   if (seconds !== undefined) {
 
-    // Cache the last set value for optimiized scrubbing (esp. Flash)
+    // cache the last set value for optimiized scrubbing (esp. Flash)
     this.cache_.duration = parseFloat(seconds);
 
     return this;
   }
 
-  return this.cache_.duration;
+  if (this.cache_.duration === undefined) {
+    this.onDurationChange();
+  }
+
+  return this.cache_.duration || 0;
 };
 
 // Calculates how much time is left. Not in spec, but useful.
@@ -534,14 +719,36 @@ vjs.Player.prototype.remainingTime = function(){
 // Buffered returns a timerange object.
 // Kind of like an array of portions of the video that have been downloaded.
 // So far no browsers return more than one range (portion)
+
+/**
+ * Get a TimeRange object with the times of the video that have been downloaded
+ *
+ * If you just want the percent of the video that's been downloaded,
+ * use bufferedPercent.
+ *
+ *     // Number of different ranges of time have been buffered. Usually 1.
+ *     numberOfRanges = bufferedTimeRange.length,
+ *
+ *     // Time in seconds when the first range starts. Usually 0.
+ *     firstRangeStart = bufferedTimeRange.start(0),
+ *
+ *     // Time in seconds when the first range ends
+ *     firstRangeEnd = bufferedTimeRange.end(0),
+ *
+ *     // Length in seconds of the first time range
+ *     firstRangeLength = firstRangeEnd - firstRangeStart;
+ *
+ * @return {Object} A mock TimeRange object (following HTML spec)
+ */
 vjs.Player.prototype.buffered = function(){
   var buffered = this.techGet('buffered'),
       start = 0,
+      buflast = buffered.length - 1,
       // Default end to 0 and store in values
       end = this.cache_.bufferEnd = this.cache_.bufferEnd || 0;
 
-  if (buffered && buffered.length > 0 && buffered.end(0) !== end) {
-    end = buffered.end(0);
+  if (buffered && buflast >= 0 && buffered.end(buflast) !== end) {
+    end = buffered.end(buflast);
     // Storing values allows them be overridden by setBufferedFromProgress
     this.cache_.bufferEnd = end;
   }
@@ -549,12 +756,35 @@ vjs.Player.prototype.buffered = function(){
   return vjs.createTimeRange(start, end);
 };
 
-// Calculates amount of buffer is full. Not in spec but useful.
+/**
+ * Get the percent (as a decimal) of the video that's been downloaded
+ *
+ *     var howMuchIsDownloaded = myPlayer.bufferedPercent();
+ *
+ * 0 means none, 1 means all.
+ * (This method isn't in the HTML5 spec, but it's very convenient)
+ *
+ * @return {Number} A decimal between 0 and 1 representing the percent
+ */
 vjs.Player.prototype.bufferedPercent = function(){
   return (this.duration()) ? this.buffered().end(0) / this.duration() : 0;
 };
 
-// http://dev.w3.org/html5/spec/video.html#dom-media-volume
+/**
+ * Get or set the current volume of the media
+ *
+ *     // get
+ *     var howLoudIsIt = myPlayer.volume();
+ *
+ *     // set
+ *     myPlayer.volume(0.5); // Set volume to half
+ *
+ * 0 is off (muted), 1.0 is all the way up, 0.5 is half way.
+ *
+ * @param  {Number} percentAsDecimal The new volume as a decimal percent
+ * @return {Number}                  The current volume, when getting
+ * @return {vjs.Player}              self, when setting
+ */
 vjs.Player.prototype.volume = function(percentAsDecimal){
   var vol;
 
@@ -571,7 +801,20 @@ vjs.Player.prototype.volume = function(percentAsDecimal){
   return (isNaN(vol)) ? 1 : vol;
 };
 
-// http://dev.w3.org/html5/spec/video.html#attr-media-muted
+
+/**
+ * Get the current muted state, or turn mute on or off
+ *
+ *     // get
+ *     var isVolumeMuted = myPlayer.muted();
+ *
+ *     // set
+ *     myPlayer.muted(true); // mute the volume
+ *
+ * @param  {Boolean=} muted True to mute, false to unmute
+ * @return {Boolean} True if mute is on, false if not, when getting
+ * @return {vjs.Player} self, when setting mute
+ */
 vjs.Player.prototype.muted = function(muted){
   if (muted !== undefined) {
     this.techCall('setMuted', muted);
@@ -580,58 +823,91 @@ vjs.Player.prototype.muted = function(muted){
   return this.techGet('muted') || false; // Default to false
 };
 
-// Check if current tech can support native fullscreen (e.g. with built in controls lik iOS, so not our flash swf)
-vjs.Player.prototype.supportsFullScreen = function(){ return this.techGet('supportsFullScreen') || false; };
+// Check if current tech can support native fullscreen
+// (e.g. with built in controls lik iOS, so not our flash swf)
+vjs.Player.prototype.supportsFullScreen = function(){
+  return this.techGet('supportsFullScreen') || false;
+};
 
-// Turn on fullscreen (or window) mode
+/**
+ * is the player in fullscreen
+ * @type {Boolean}
+ * @private
+ */
+vjs.Player.prototype.isFullScreen_ = false;
+
+/**
+ * Check if the player is in fullscreen mode
+ *
+ *     // get
+ *     var fullscreenOrNot = myPlayer.isFullScreen();
+ *
+ *     // set
+ *     myPlayer.isFullScreen(true); // tell the player it's in fullscreen
+ *
+ * NOTE: As of the latest HTML5 spec, isFullScreen is no longer an official
+ * property and instead document.fullscreenElement is used. But isFullScreen is
+ * still a valuable property for internal player workings.
+ *
+ * @param  {Boolean=} isFS Update the player's fullscreen state
+ * @return {Boolean} true if fullscreen, false if not
+ * @return {vjs.Player} self, when setting
+ */
+vjs.Player.prototype.isFullScreen = function(isFS){
+  if (isFS !== undefined) {
+    this.isFullScreen_ = isFS;
+    return this;
+  }
+  return this.isFullScreen_;
+};
+
+/**
+ * Increase the size of the video to full screen
+ *
+ *     myPlayer.requestFullScreen();
+ *
+ * In some browsers, full screen is not supported natively, so it enters
+ * "full window mode", where the video fills the browser window.
+ * In browsers and devices that support native full screen, sometimes the
+ * browser's default controls will be shown, and not the Video.js custom skin.
+ * This includes most mobile devices (iOS, Android) and older versions of
+ * Safari.
+ *
+ * @return {vjs.Player} self
+ */
 vjs.Player.prototype.requestFullScreen = function(){
   var requestFullScreen = vjs.support.requestFullScreen;
-  this.isFullScreen = true;
+  this.isFullScreen(true);
 
   if (requestFullScreen) {
     // the browser supports going fullscreen at the element level so we can
     // take the controls fullscreen as well as the video
 
     // Trigger fullscreenchange event after change
-    vjs.on(document, requestFullScreen.eventName, vjs.bind(this, function(){
-      this.isFullScreen = document[requestFullScreen.isFullScreen];
+    // We have to specifically add this each time, and remove
+    // when cancelling fullscreen. Otherwise if there's multiple
+    // players on a page, they would all be reacting to the same fullscreen
+    // events
+    vjs.on(document, requestFullScreen.eventName, vjs.bind(this, function(e){
+      this.isFullScreen(document[requestFullScreen.isFullScreen]);
 
       // If cancelling fullscreen, remove event listener.
-      if (this.isFullScreen === false) {
+      if (this.isFullScreen() === false) {
         vjs.off(document, requestFullScreen.eventName, arguments.callee);
       }
 
+      this.trigger('fullscreenchange');
     }));
 
-    // Flash and other plugins get reloaded when you take their parent to fullscreen.
-    // To fix that we'll remove the tech, and reload it after the resize has finished.
-    if (this.tech.features.fullscreenResize === false && this.options_['flash']['iFrameMode'] !== true) {
-
-      this.pause();
-      this.unloadTech();
-
-      vjs.on(document, requestFullScreen.eventName, vjs.bind(this, function(){
-        vjs.off(document, requestFullScreen.eventName, arguments.callee);
-        this.loadTech(this.techName, { src: this.cache_.src });
-      }));
-
-      this.el_[requestFullScreen.requestFn]();
-
-    } else {
-      this.el_[requestFullScreen.requestFn]();
-    }
-
-    this.trigger('fullscreenchange');
+    this.el_[requestFullScreen.requestFn]();
 
   } else if (this.tech.supportsFullScreen()) {
     // we can't take the video.js controls fullscreen but we can go fullscreen
     // with native controls
-
     this.techCall('enterFullScreen');
   } else {
     // fullscreen isn't supported so we'll just stretch the video element to
     // fill the viewport
-
     this.enterFullWindow();
     this.trigger('fullscreenchange');
   }
@@ -639,33 +915,20 @@ vjs.Player.prototype.requestFullScreen = function(){
   return this;
 };
 
+/**
+ * Return the video to its normal size after having been in full screen mode
+ *
+ *     myPlayer.cancelFullScreen();
+ *
+ * @return {vjs.Player} self
+ */
 vjs.Player.prototype.cancelFullScreen = function(){
   var requestFullScreen = vjs.support.requestFullScreen;
-
-  this.isFullScreen = false;
+  this.isFullScreen(false);
 
   // Check for browser element fullscreen support
   if (requestFullScreen) {
-
-   // Flash and other plugins get reloaded when you take their parent to fullscreen.
-   // To fix that we'll remove the tech, and reload it after the resize has finished.
-   if (this.tech.features.fullscreenResize === false && this.options_['flash']['iFrameMode'] !== true) {
-
-     this.pause();
-     this.unloadTech();
-
-     vjs.on(document, requestFullScreen.eventName, vjs.bind(this, function(){
-       vjs.off(document, requestFullScreen.eventName, arguments.callee);
-       this.loadTech(this.techName, { src: this.cache_.src });
-     }));
-
-     document[requestFullScreen.cancelFn]();
-   } else {
-     document[requestFullScreen.cancelFn]();
-   }
-
-   this.trigger('fullscreenchange');
-
+    document[requestFullScreen.cancelFn]();
   } else if (this.tech.supportsFullScreen()) {
    this.techCall('exitFullScreen');
   } else {
@@ -696,7 +959,7 @@ vjs.Player.prototype.enterFullWindow = function(){
 };
 vjs.Player.prototype.fullWindowOnEscKey = function(event){
   if (event.keyCode === 27) {
-    if (this.isFullScreen === true) {
+    if (this.isFullScreen() === true) {
       this.cancelFullScreen();
     } else {
       this.exitFullWindow();
@@ -787,12 +1050,43 @@ vjs.Player.prototype.selectResolution = function(typeSources) {
   return typeSources[actualRes];
 };
 
-// src is a pretty powerful function
-// If you pass it an array of source objects, it will find the best source to play and use that object.src
-//   If the new source requires a new playback technology, it will switch to that.
-// If you pass it an object, it will set the source to object.src
-// If you pass it anything else (url string) it will set the video source to that
+/**
+ * The source function updates the video source
+ *
+ * There are three types of variables you can pass as the argument.
+ *
+ * **URL String**: A URL to the the video file. Use this method if you are sure
+ * the current playback technology (HTML5/Flash) can support the source you
+ * provide. Currently only MP4 files can be used in both HTML5 and Flash.
+ *
+ *     myPlayer.src("http://www.example.com/path/to/video.mp4");
+ *
+ * **Source Object (or element):** A javascript object containing information
+ * about the source file. Use this method if you want the player to determine if
+ * it can support the file using the type information.
+ *
+ *     myPlayer.src({ type: "video/mp4", src: "http://www.example.com/path/to/video.mp4" });
+ *
+ * **Array of Source Objects:** To provide multiple versions of the source so
+ * that it can be played using HTML5 across browsers you can use an array of
+ * source objects. Video.js will detect which version is supported and load that
+ * file.
+ *
+ *     myPlayer.src([
+ *       { type: "video/mp4", src: "http://www.example.com/path/to/video.mp4" },
+ *       { type: "video/webm", src: "http://www.example.com/path/to/video.webm" },
+ *       { type: "video/ogg", src: "http://www.example.com/path/to/video.ogv" }
+ *     ]);
+ *
+ * @param  {String|Object|Array=} source The source URL, object, or array of sources
+ * @return {String} The current video source when getting
+ * @return {String} The player when setting
+ */
 vjs.Player.prototype.src = function(source){
+  if (source === undefined) {
+    return this.techGet('src');
+  }
+
   // Case: Array of source objects to choose from and pick the best to play
   if (source instanceof Array) {
 
@@ -812,8 +1106,9 @@ vjs.Player.prototype.src = function(source){
       }
     } else {
       this.el_.appendChild(vjs.createEl('p', {
-        innerHTML: 'Sorry, no compatible source and playback technology were found for this video. Try using another browser like <a href="http://bit.ly/ccMUEC">Chrome</a> or download the latest <a href="http://adobe.ly/mwfN1">Adobe Flash Player</a>.'
+        innerHTML: this.options()['notSupportedMessage']
       }));
+      this.triggerReady(); // we could not find an appropriate tech, but let's still notify the delegate that this is it
     }
   // Case: Source object { src: '', type: '' ... }
   } else if (source instanceof Object) {
@@ -843,9 +1138,6 @@ vjs.Player.prototype.src = function(source){
       }
     }
   }
-  // Pass source and resolution to player variables.
-  this.source_ = source.src || null;
-  this.resolution_ = source.res || null;
 
   return this;
 };
@@ -889,22 +1181,40 @@ vjs.Player.prototype.loop = function(value){
 };
 
 /**
- * The url of the poster image source.
+ * the url of the poster image source
  * @type {String}
  * @private
  */
 vjs.Player.prototype.poster_;
 
 /**
- * Get or set the poster image source url.
- * @param  {String} src Poster image source URL
- * @return {String}    Poster image source URL or null
+ * get or set the poster image source url
+ *
+ * ##### EXAMPLE:
+ *
+ *     // getting
+ *     var currentPoster = myPlayer.poster();
+ *
+ *     // setting
+ *     myPlayer.poster('http://example.com/myImage.jpg');
+ *
+ * @param  {String=} [src] Poster image source URL
+ * @return {String} poster URL when getting
+ * @return {vjs.Player} self when setting
  */
 vjs.Player.prototype.poster = function(src){
-  if (src !== undefined) {
-    this.poster_ = src;
+  if (src === undefined) {
+    return this.poster_;
   }
-  return this.poster_;
+
+  // update the internal poster variable
+  this.poster_ = src;
+
+  // update the tech's poster
+  this.techCall('setPoster', src);
+
+  // alert components that the poster has been set
+  this.trigger('posterchange');
 };
 
 /**
@@ -919,54 +1229,206 @@ vjs.Player.prototype.controls_;
  * @param  {Boolean} controls Set controls to showing or not
  * @return {Boolean}    Controls are showing
  */
-vjs.Player.prototype.controls = function(controls){
-  if (controls !== undefined) {
+vjs.Player.prototype.controls = function(bool){
+  if (bool !== undefined) {
+    bool = !!bool; // force boolean
     // Don't trigger a change event unless it actually changed
-    if (this.controls_ !== controls) {
-      this.controls_ = !!controls; // force boolean
-      this.trigger('controlschange');
+    if (this.controls_ !== bool) {
+      this.controls_ = bool;
+      if (bool) {
+        this.removeClass('vjs-controls-disabled');
+        this.addClass('vjs-controls-enabled');
+        this.trigger('controlsenabled');
+      } else {
+        this.removeClass('vjs-controls-enabled');
+        this.addClass('vjs-controls-disabled');
+        this.trigger('controlsdisabled');
+      }
     }
+    return this;
   }
   return this.controls_;
 };
 
+vjs.Player.prototype.usingNativeControls_;
+
 /**
- * The url of the current source.
- * @type {String}
+ * Toggle native controls on/off. Native controls are the controls built into
+ * devices (e.g. default iPhone controls), Flash, or other techs
+ * (e.g. Vimeo Controls)
+ *
+ * **This should only be set by the current tech, because only the tech knows
+ * if it can support native controls**
+ *
+ * @param  {Boolean} bool    True signals that native controls are on
+ * @return {vjs.Player}      Returns the player
  * @private
  */
-vjs.Player.prototype.source_;
+vjs.Player.prototype.usingNativeControls = function(bool){
+  if (bool !== undefined) {
+    bool = !!bool; // force boolean
+    // Don't trigger a change event unless it actually changed
+    if (this.usingNativeControls_ !== bool) {
+      this.usingNativeControls_ = bool;
+      if (bool) {
+        this.addClass('vjs-using-native-controls');
 
-/**
- * Get the current source url.
- * @return {String}    Current source URL or null
- */
-vjs.Player.prototype.source = function(){
-  return this.source_;
-};
+        /**
+         * player is using the native device controls
+         *
+         * @event usingnativecontrols
+         * @memberof vjs.Player
+         * @instance
+         * @private
+         */
+        this.trigger('usingnativecontrols');
+      } else {
+        this.removeClass('vjs-using-native-controls');
 
-/**
- * The url of the current resolution.
- * @type {String}
- * @private
- */
-vjs.Player.prototype.resolution_;
-
-/**
- * Get the current resolution.
- * @return {String}    Current resolution or null
- */
-vjs.Player.prototype.resolution = function(){
-  return this.resolution_;
+        /**
+         * player is using the custom HTML controls
+         *
+         * @event usingcustomcontrols
+         * @memberof vjs.Player
+         * @instance
+         * @private
+         */
+        this.trigger('usingcustomcontrols');
+      }
+    }
+    return this;
+  }
+  return this.usingNativeControls_;
 };
 
 vjs.Player.prototype.error = function(){ return this.techGet('error'); };
 vjs.Player.prototype.ended = function(){ return this.techGet('ended'); };
+vjs.Player.prototype.seeking = function(){ return this.techGet('seeking'); };
+
+// When the player is first initialized, trigger activity so components
+// like the control bar show themselves if needed
+vjs.Player.prototype.userActivity_ = true;
+vjs.Player.prototype.reportUserActivity = function(event){
+  this.userActivity_ = true;
+};
+
+vjs.Player.prototype.userActive_ = true;
+vjs.Player.prototype.userActive = function(bool){
+  if (bool !== undefined) {
+    bool = !!bool;
+    if (bool !== this.userActive_) {
+      this.userActive_ = bool;
+      if (bool) {
+        // If the user was inactive and is now active we want to reset the
+        // inactivity timer
+        this.userActivity_ = true;
+        this.removeClass('vjs-user-inactive');
+        this.addClass('vjs-user-active');
+        this.trigger('useractive');
+      } else {
+        // We're switching the state to inactive manually, so erase any other
+        // activity
+        this.userActivity_ = false;
+
+        // Chrome/Safari/IE have bugs where when you change the cursor it can
+        // trigger a mousemove event. This causes an issue when you're hiding
+        // the cursor when the user is inactive, and a mousemove signals user
+        // activity. Making it impossible to go into inactive mode. Specifically
+        // this happens in fullscreen when we really need to hide the cursor.
+        //
+        // When this gets resolved in ALL browsers it can be removed
+        // https://code.google.com/p/chromium/issues/detail?id=103041
+        if(this.tech) {
+          this.tech.one('mousemove', function(e){
+            e.stopPropagation();
+            e.preventDefault();
+          });
+        }
+
+        this.removeClass('vjs-user-active');
+        this.addClass('vjs-user-inactive');
+        this.trigger('userinactive');
+      }
+    }
+    return this;
+  }
+  return this.userActive_;
+};
+
+vjs.Player.prototype.listenForUserActivity = function(){
+  var onMouseActivity, onMouseDown, mouseInProgress, onMouseUp,
+      activityCheck, inactivityTimeout;
+
+  onMouseActivity = vjs.bind(this, this.reportUserActivity);
+
+  onMouseDown = function() {
+    onMouseActivity();
+    // For as long as the they are touching the device or have their mouse down,
+    // we consider them active even if they're not moving their finger or mouse.
+    // So we want to continue to update that they are active
+    clearInterval(mouseInProgress);
+    // Setting userActivity=true now and setting the interval to the same time
+    // as the activityCheck interval (250) should ensure we never miss the
+    // next activityCheck
+    mouseInProgress = setInterval(onMouseActivity, 250);
+  };
+
+  onMouseUp = function(event) {
+    onMouseActivity();
+    // Stop the interval that maintains activity if the mouse/touch is down
+    clearInterval(mouseInProgress);
+  };
+
+  // Any mouse movement will be considered user activity
+  this.on('mousedown', onMouseDown);
+  this.on('mousemove', onMouseActivity);
+  this.on('mouseup', onMouseUp);
+
+  // Listen for keyboard navigation
+  // Shouldn't need to use inProgress interval because of key repeat
+  this.on('keydown', onMouseActivity);
+  this.on('keyup', onMouseActivity);
+
+  // Run an interval every 250 milliseconds instead of stuffing everything into
+  // the mousemove/touchmove function itself, to prevent performance degradation.
+  // `this.reportUserActivity` simply sets this.userActivity_ to true, which
+  // then gets picked up by this loop
+  // http://ejohn.org/blog/learning-from-twitter/
+  activityCheck = setInterval(vjs.bind(this, function() {
+    // Check to see if mouse/touch activity has happened
+    if (this.userActivity_) {
+      // Reset the activity tracker
+      this.userActivity_ = false;
+
+      // If the user state was inactive, set the state to active
+      this.userActive(true);
+
+      // Clear any existing inactivity timeout to start the timer over
+      clearTimeout(inactivityTimeout);
+
+      // In X seconds, if no more activity has occurred the user will be
+      // considered inactive
+      inactivityTimeout = setTimeout(vjs.bind(this, function() {
+        // Protect against the case where the inactivityTimeout can trigger just
+        // before the next user activity is picked up by the activityCheck loop
+        // causing a flicker
+        if (!this.userActivity_) {
+          this.userActive(false);
+        }
+      }), 2000);
+    }
+  }), 250);
+
+  // Clean up the intervals when we kill the player
+  this.on('dispose', function(){
+    clearInterval(activityCheck);
+    clearTimeout(inactivityTimeout);
+  });
+};
 
 // Methods to add support for
 // networkState: function(){ return this.techCall('networkState'); },
 // readyState: function(){ return this.techCall('readyState'); },
-// seeking: function(){ return this.techCall('seeking'); },
 // initialTime: function(){ return this.techCall('initialTime'); },
 // startOffsetTime: function(){ return this.techCall('startOffsetTime'); },
 // played: function(){ return this.techCall('played'); },
@@ -996,6 +1458,7 @@ vjs.Player.prototype.ended = function(){ return this.techGet('ended'); };
   // Current W3C Spec
   // http://dvcs.w3.org/hg/fullscreen/raw-file/tip/Overview.html#api
   // Mozilla Draft: https://wiki.mozilla.org/Gecko:FullScreenAPI#fullscreenchange_event
+  // New: https://dvcs.w3.org/hg/fullscreen/raw-file/529a67b8d9f3/Overview.html
   if (div.cancelFullscreen !== undefined) {
     requestFS.requestFn = 'requestFullscreen';
     requestFS.cancelFn = 'exitFullscreen';

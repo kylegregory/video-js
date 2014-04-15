@@ -1,27 +1,5 @@
 module('Player');
 
-var PlayerTest = {
-  makeTag: function(){
-    var videoTag = document.createElement('video');
-    videoTag.id = 'example_1';
-    videoTag.className = 'video-js vjs-default-skin';
-    return videoTag;
-  },
-  makePlayer: function(playerOptions){
-    var player;
-    var videoTag = PlayerTest.makeTag();
-
-    var fixture = document.getElementById('qunit-fixture');
-    fixture.appendChild(videoTag);
-
-    var opts = vjs.obj.merge({
-      'techOrder': ['mediaFaker']
-    }, playerOptions);
-
-    return player = new vjs.Player(videoTag, opts);
-  }
-};
-
 // Compiler doesn't like using 'this' in setup/teardown.
 // module("Player", {
 //   /**
@@ -130,7 +108,7 @@ test('should get tag, source, and track settings', function(){
 
   player.dispose();
 
-  ok(tag['player'] === null, 'tag player ref killed');
+  ok(tag['player'] !== player, 'tag player ref killed');
   ok(!vjs.players['example_1'], 'global player ref killed');
   ok(player.el() === null, 'player el killed');
 });
@@ -162,7 +140,7 @@ test('should not force width and height', function() {
   player.dispose();
 });
 
-test('should accept options from multiple sources and override in correct order', function(){
+test('should wrap the original tag in the player div', function(){
   var tag = PlayerTest.makeTag();
   var container = document.createElement('div');
   var fixture = document.getElementById('qunit-fixture');
@@ -180,19 +158,26 @@ test('should accept options from multiple sources and override in correct order'
   player.dispose();
 });
 
-test('should transfer the poster attribute unmodified', function(){
-  var tag, fixture, poster, player;
+test('should set and update the poster value', function(){
+  var tag, poster, updatedPoster, player;
+
   poster = 'http://example.com/poster.jpg';
+  updatedPoster = 'http://example.com/updated-poster.jpg';
+
   tag = PlayerTest.makeTag();
   tag.setAttribute('poster', poster);
-  fixture = document.getElementById('qunit-fixture');
 
-  fixture.appendChild(tag);
-  player = new vjs.Player(tag, {
-    'techOrder': ['mediaFaker']
+  player = PlayerTest.makePlayer({}, tag);
+  equal(player.poster(), poster, 'the poster property should equal the tag attribute');
+
+  var pcEmitted = false;
+  player.on('posterchange', function(){
+    pcEmitted = true;
   });
 
-  equal(player.tech.el().poster, poster, 'the poster attribute should not be removed');
+  player.poster(updatedPoster);
+  ok(pcEmitted, 'posterchange event was emitted');
+  equal(player.poster(), updatedPoster, 'the updated poster is returned');
 
   player.dispose();
 });
@@ -232,21 +217,188 @@ test('should be able to initialize player twice on the same tag using string ref
   player.dispose();
 });
 
-test('should set controls and trigger event', function() {
-  expect(3);
+test('should set controls and trigger events', function() {
+  expect(6);
 
   var player = PlayerTest.makePlayer({ 'controls': false });
   ok(player.controls() === false, 'controls set through options');
+  var hasDisabledClass = player.el().className.indexOf('vjs-controls-disabled');
+  ok(hasDisabledClass !== -1, 'Disabled class added to player');
+
   player.controls(true);
   ok(player.controls() === true, 'controls updated');
+  var hasEnabledClass = player.el().className.indexOf('vjs-controls-enabled');
+  ok(hasEnabledClass !== -1, 'Disabled class added to player');
 
-  player.on('controlschange', function(){
-    ok(true, 'controlschange fired once');
+  player.on('controlsenabled', function(){
+    ok(true, 'enabled fired once');
+  });
+  player.on('controlsdisabled', function(){
+    ok(true, 'disabled fired once');
   });
   player.controls(false);
-  // Check for unnecessary controlschange events
-  player.controls(false);
+  player.controls(true);
+  // Check for unnecessary events
+  player.controls(true);
 
   player.dispose();
 });
 
+// Can't figure out how to test fullscreen events with tests
+// Browsers aren't triggering the events at least
+// asyncTest('should trigger the fullscreenchange event', function() {
+//   expect(3);
+
+//   var player = PlayerTest.makePlayer();
+//   player.on('fullscreenchange', function(){
+//     ok(true, 'fullscreenchange event fired');
+//     ok(this.isFullScreen() === true, 'isFullScreen is true');
+//     ok(this.el().className.indexOf('vjs-fullscreen') !== -1, 'vjs-fullscreen class added');
+
+//     player.dispose();
+//     start();
+//   });
+
+//   player.requestFullScreen();
+// });
+
+test('should toggle user the user state between active and inactive', function(){
+  var player = PlayerTest.makePlayer({});
+
+  expect(9);
+
+  ok(player.userActive(), 'User should be active at player init');
+
+  player.on('userinactive', function(){
+    ok(true, 'userinactive event triggered');
+  });
+
+  player.on('useractive', function(){
+    ok(true, 'useractive event triggered');
+  });
+
+  player.userActive(false);
+  ok(player.userActive() === false, 'Player state changed to inactive');
+  ok(player.el().className.indexOf('vjs-user-active') === -1, 'Active class removed');
+  ok(player.el().className.indexOf('vjs-user-inactive') !== -1, 'Inactive class added');
+
+  player.userActive(true);
+  ok(player.userActive() === true, 'Player state changed to active');
+  ok(player.el().className.indexOf('vjs-user-inactive') === -1, 'Inactive class removed');
+  ok(player.el().className.indexOf('vjs-user-active') !== -1, 'Active class added');
+
+  player.dispose();
+});
+
+test('should add a touch-enabled classname when touch is supported', function(){
+  var player;
+
+  expect(1);
+
+  // Fake touch support. Real touch support isn't needed for this test.
+  var origTouch = vjs.TOUCH_ENABLED;
+  vjs.TOUCH_ENABLED = true;
+
+  player = PlayerTest.makePlayer({});
+
+  ok(player.el().className.indexOf('vjs-touch-enabled'), 'touch-enabled classname added');
+
+
+  vjs.TOUCH_ENABLED = origTouch;
+  player.dispose();
+});
+
+test('should allow for tracking when native controls are used', function(){
+  var player = PlayerTest.makePlayer({});
+
+  expect(6);
+
+  // Make sure native controls is false before starting test
+  player.usingNativeControls(false);
+
+  player.on('usingnativecontrols', function(){
+    ok(true, 'usingnativecontrols event triggered');
+  });
+
+  player.on('usingcustomcontrols', function(){
+    ok(true, 'usingcustomcontrols event triggered');
+  });
+
+  player.usingNativeControls(true);
+  ok(player.usingNativeControls() === true, 'Using native controls is true');
+  ok(player.el().className.indexOf('vjs-using-native-controls') !== -1, 'Native controls class added');
+
+  player.usingNativeControls(false);
+  ok(player.usingNativeControls() === false, 'Using native controls is false');
+  ok(player.el().className.indexOf('vjs-using-native-controls') === -1, 'Native controls class removed');
+
+  player.dispose();
+});
+
+test('should use custom message when encountering an unsupported video type',
+    function() {
+  videojs.options['notSupportedMessage'] = 'Video no go <a href="">link</a>';
+  var fixture = document.getElementById('qunit-fixture');
+
+  var html =
+      '<video id="example_1">' +
+          '<source src="fake.foo" type="video/foo">' +
+          '</video>';
+
+  fixture.innerHTML += html;
+
+  var tag = document.getElementById('example_1');
+  var player = new vjs.Player(tag);
+
+  var incompatibilityMessage = player.el().getElementsByTagName('p')[0];
+  // ie8 capitalizes tag names
+  equal(incompatibilityMessage.innerHTML.toLowerCase(), 'video no go <a href="">link</a>');
+
+  player.dispose();
+});
+
+test('should register players with generated ids', function(){
+  var fixture, video, player, id;
+  fixture = document.getElementById('qunit-fixture');
+
+  video = document.createElement('video');
+  video.className = 'vjs-default-skin video-js';
+  fixture.appendChild(video);
+
+  player = new vjs.Player(video);
+  id = player.el().id;
+
+  equal(player.el().id, player.id(), 'the player and element ids are equal');
+  ok(vjs.players[id], 'the generated id is registered');
+});
+
+test('should not add multiple first play events despite subsequent loads', function() {
+  expect(1);
+
+  var player = PlayerTest.makePlayer({});
+
+  player.on('firstplay', function(){
+    ok('First play should fire once.');
+  });
+
+  // Checking to make sure onLoadStart removes first play listener before adding a new one.
+  player.trigger('loadstart');
+  player.trigger('loadstart');
+  player.trigger('play');
+});
+
+test('should remove vjs-has-started class', function(){
+  expect(3);
+
+  var player = PlayerTest.makePlayer({});
+
+  player.trigger('loadstart');
+  player.trigger('play');
+  ok(player.el().className.indexOf('vjs-has-started') !== -1, 'vjs-has-started class added');
+
+  player.trigger('loadstart');
+  ok(player.el().className.indexOf('vjs-has-started') === -1, 'vjs-has-started class removed');
+
+  player.trigger('play');
+  ok(player.el().className.indexOf('vjs-has-started') !== -1, 'vjs-has-started class added again');
+});

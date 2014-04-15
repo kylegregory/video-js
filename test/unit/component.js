@@ -3,7 +3,8 @@ module('Component');
 var getFakePlayer = function(){
   return {
     // Fake player requries an ID
-    id: function(){ return 'player_1'; }
+    id: function(){ return 'player_1'; },
+    reportUserActivity: function(){}
   };
 };
 
@@ -82,8 +83,17 @@ test('should dispose of component and children', function(){
   var data = vjs.getData(comp.el());
   var id = comp.el()[vjs.expando];
 
+  var hasDisposed = false;
+  var bubbles = null;
+  comp.on('dispose', function(event){
+    hasDisposed = true;
+    bubbles = event.bubbles;
+  });
+
   comp.dispose();
 
+  ok(hasDisposed, 'component fired dispose event');
+  ok(bubbles === false, 'dispose event does not bubble');
   ok(!comp.children(), 'component children were deleted');
   ok(!comp.el(), 'component element was deleted');
   ok(!child.children(), 'child children were deleted');
@@ -216,4 +226,30 @@ test('should use a defined content el for appending children', function(){
   ok(comp.children().length === 0, 'Length should now be zero');
   ok(comp.el().childNodes[0]['id'] === 'contentEl', 'Content El should still exist');
   ok(comp.el().childNodes[0].childNodes[0] !== child.el(), 'Child el should be removed.');
+});
+
+test('should emit a tap event', function(){
+  expect(1);
+
+  // Fake touch support. Real touch support isn't needed for this test.
+  var origTouch = vjs.TOUCH_ENABLED;
+  vjs.TOUCH_ENABLED = true;
+
+  var comp = new vjs.Component(getFakePlayer());
+
+  comp.emitTapEvents();
+  comp.on('tap', function(){
+    ok(true, 'Tap event emitted');
+  });
+  comp.trigger('touchstart');
+  comp.trigger('touchend');
+
+  // This second test should not trigger another tap event because
+  // a touchmove is happening
+  comp.trigger('touchstart');
+  comp.trigger('touchmove');
+  comp.trigger('touchend');
+
+  // Reset to orignial value
+  vjs.TOUCH_ENABLED = origTouch;
 });

@@ -29,6 +29,8 @@ goog.exportSymbol('videojs', vjs);
 goog.exportSymbol('_V_', vjs);
 
 goog.exportSymbol('videojs.options', vjs.options);
+goog.exportSymbol('videojs.players', vjs.players);
+goog.exportSymbol('videojs.TOUCH_ENABLED', vjs.TOUCH_ENABLED);
 
 // Allow external components to use global cache
 goog.exportSymbol('videojs.cache', vjs.cache);
@@ -37,11 +39,20 @@ goog.exportSymbol('videojs.cache', vjs.cache);
 // goog.exportProperty(vjs.CoreObject, 'create', vjs.CoreObject.create);
 
 goog.exportSymbol('videojs.Component', vjs.Component);
+// already in default externs: id, name
+goog.exportProperty(vjs.Component.prototype, 'player', vjs.Component.prototype.player);
+goog.exportProperty(vjs.Component.prototype, 'options', vjs.Component.prototype.options);
+goog.exportProperty(vjs.Component.prototype, 'init', vjs.Component.prototype.init);
 goog.exportProperty(vjs.Component.prototype, 'dispose', vjs.Component.prototype.dispose);
 goog.exportProperty(vjs.Component.prototype, 'createEl', vjs.Component.prototype.createEl);
+goog.exportProperty(vjs.Component.prototype, 'contentEl', vjs.Component.prototype.contentEl);
 goog.exportProperty(vjs.Component.prototype, 'el', vjs.Component.prototype.el);
 goog.exportProperty(vjs.Component.prototype, 'addChild', vjs.Component.prototype.addChild);
+goog.exportProperty(vjs.Component.prototype, 'getChild', vjs.Component.prototype.getChild);
+goog.exportProperty(vjs.Component.prototype, 'getChildById', vjs.Component.prototype.getChildById);
 goog.exportProperty(vjs.Component.prototype, 'children', vjs.Component.prototype.children);
+goog.exportProperty(vjs.Component.prototype, 'initChildren', vjs.Component.prototype.initChildren);
+goog.exportProperty(vjs.Component.prototype, 'removeChild', vjs.Component.prototype.removeChild);
 goog.exportProperty(vjs.Component.prototype, 'on', vjs.Component.prototype.on);
 goog.exportProperty(vjs.Component.prototype, 'off', vjs.Component.prototype.off);
 goog.exportProperty(vjs.Component.prototype, 'one', vjs.Component.prototype.one);
@@ -53,9 +64,12 @@ goog.exportProperty(vjs.Component.prototype, 'width', vjs.Component.prototype.wi
 goog.exportProperty(vjs.Component.prototype, 'height', vjs.Component.prototype.height);
 goog.exportProperty(vjs.Component.prototype, 'dimensions', vjs.Component.prototype.dimensions);
 goog.exportProperty(vjs.Component.prototype, 'ready', vjs.Component.prototype.ready);
+goog.exportProperty(vjs.Component.prototype, 'addClass', vjs.Component.prototype.addClass);
+goog.exportProperty(vjs.Component.prototype, 'removeClass', vjs.Component.prototype.removeClass);
+goog.exportProperty(vjs.Component.prototype, 'buildCSSClass', vjs.Component.prototype.buildCSSClass);
 
-goog.exportSymbol('videojs.Player', vjs.Player);
-goog.exportProperty(vjs.Player.prototype, 'dispose', vjs.Player.prototype.dispose);
+// Need to export ended to ensure it's not removed by CC, since it's not used internally
+goog.exportProperty(vjs.Player.prototype, 'ended', vjs.Player.prototype.ended);
 
 goog.exportSymbol('videojs.MediaLoader', vjs.MediaLoader);
 goog.exportSymbol('videojs.TextTrackDisplay', vjs.TextTrackDisplay);
@@ -70,6 +84,7 @@ goog.exportSymbol('videojs.CurrentTimeDisplay', vjs.CurrentTimeDisplay);
 goog.exportSymbol('videojs.DurationDisplay', vjs.DurationDisplay);
 goog.exportSymbol('videojs.TimeDivider', vjs.TimeDivider);
 goog.exportSymbol('videojs.RemainingTimeDisplay', vjs.RemainingTimeDisplay);
+goog.exportSymbol('videojs.LiveDisplay', vjs.LiveDisplay);
 goog.exportSymbol('videojs.Slider', vjs.Slider);
 goog.exportSymbol('videojs.ProgressControl', vjs.ProgressControl);
 goog.exportSymbol('videojs.SeekBar', vjs.SeekBar);
@@ -79,11 +94,16 @@ goog.exportSymbol('videojs.SeekHandle', vjs.SeekHandle);
 goog.exportSymbol('videojs.VolumeControl', vjs.VolumeControl);
 goog.exportSymbol('videojs.VolumeBar', vjs.VolumeBar);
 goog.exportSymbol('videojs.VolumeLevel', vjs.VolumeLevel);
+goog.exportSymbol('videojs.VolumeMenuButton', vjs.VolumeMenuButton);
 goog.exportSymbol('videojs.VolumeHandle', vjs.VolumeHandle);
 goog.exportSymbol('videojs.MuteToggle', vjs.MuteToggle);
 goog.exportSymbol('videojs.PosterImage', vjs.PosterImage);
 goog.exportSymbol('videojs.Menu', vjs.Menu);
 goog.exportSymbol('videojs.MenuItem', vjs.MenuItem);
+goog.exportSymbol('videojs.MenuButton', vjs.MenuButton);
+goog.exportProperty(vjs.MenuButton.prototype, 'createItems', vjs.MenuButton.prototype.createItems);
+goog.exportProperty(vjs.TextTrackButton.prototype, 'createItems', vjs.TextTrackButton.prototype.createItems);
+goog.exportProperty(vjs.ChaptersButton.prototype, 'createItems', vjs.ChaptersButton.prototype.createItems);
 
 goog.exportSymbol('videojs.SubtitlesButton', vjs.SubtitlesButton);
 goog.exportSymbol('videojs.CaptionsButton', vjs.CaptionsButton);
@@ -95,11 +115,15 @@ goog.exportProperty(vjs.MediaTechController.prototype.features, 'volumeControl',
 goog.exportProperty(vjs.MediaTechController.prototype.features, 'fullscreenResize', vjs.MediaTechController.prototype.features.fullscreenResize);
 goog.exportProperty(vjs.MediaTechController.prototype.features, 'progressEvents', vjs.MediaTechController.prototype.features.progressEvents);
 goog.exportProperty(vjs.MediaTechController.prototype.features, 'timeupdateEvents', vjs.MediaTechController.prototype.features.timeupdateEvents);
+goog.exportProperty(vjs.MediaTechController.prototype, 'setPoster', vjs.MediaTechController.prototype.setPoster);
+
 
 goog.exportSymbol('videojs.Html5', vjs.Html5);
 goog.exportProperty(vjs.Html5, 'Events', vjs.Html5.Events);
 goog.exportProperty(vjs.Html5, 'isSupported', vjs.Html5.isSupported);
 goog.exportProperty(vjs.Html5, 'canPlaySource', vjs.Html5.canPlaySource);
+goog.exportProperty(vjs.Html5, 'patchCanPlayType', vjs.Html5.patchCanPlayType);
+goog.exportProperty(vjs.Html5, 'unpatchCanPlayType', vjs.Html5.unpatchCanPlayType);
 
 // Export non-standard HTML5 video API methods.
 // Standard method names already protected by default externs.
@@ -109,6 +133,8 @@ goog.exportProperty(vjs.Html5.prototype, 'setMuted', vjs.Html5.prototype.setMute
 goog.exportProperty(vjs.Html5.prototype, 'setPreload', vjs.Html5.prototype.setPreload);
 goog.exportProperty(vjs.Html5.prototype, 'setAutoplay', vjs.Html5.prototype.setAutoplay);
 goog.exportProperty(vjs.Html5.prototype, 'setLoop', vjs.Html5.prototype.setLoop);
+goog.exportProperty(vjs.Html5.prototype, 'enterFullScreen', vjs.Html5.prototype.enterFullScreen);
+goog.exportProperty(vjs.Html5.prototype, 'exitFullScreen', vjs.Html5.prototype.exitFullScreen);
 
 goog.exportSymbol('videojs.Flash', vjs.Flash);
 goog.exportProperty(vjs.Flash, 'isSupported', vjs.Flash.isSupported);
@@ -117,6 +143,10 @@ goog.exportProperty(vjs.Flash, 'onReady', vjs.Flash['onReady']);
 
 goog.exportSymbol('videojs.TextTrack', vjs.TextTrack);
 goog.exportProperty(vjs.TextTrack.prototype, 'label', vjs.TextTrack.prototype.label);
+goog.exportProperty(vjs.TextTrack.prototype, 'kind', vjs.TextTrack.prototype.kind);
+goog.exportProperty(vjs.TextTrack.prototype, 'mode', vjs.TextTrack.prototype.mode);
+goog.exportProperty(vjs.TextTrack.prototype, 'cues', vjs.TextTrack.prototype.cues);
+goog.exportProperty(vjs.TextTrack.prototype, 'activeCues', vjs.TextTrack.prototype.activeCues);
 
 goog.exportSymbol('videojs.Resolution', vjs.Resolution);
 goog.exportSymbol('videojs.ResolutionsButton', vjs.ResolutionsButton);
@@ -130,3 +160,6 @@ goog.exportSymbol('videojs.autoSetup', vjs.autoSetup);
 goog.exportSymbol('videojs.plugin', vjs.plugin);
 
 goog.exportSymbol('videojs.createTimeRange', vjs.createTimeRange);
+
+goog.exportSymbol('videojs.util', vjs.util);
+goog.exportProperty(vjs.util, 'mergeOptions', vjs.util.mergeOptions);
