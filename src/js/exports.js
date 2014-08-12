@@ -64,6 +64,7 @@ goog.exportProperty(vjs.Component.prototype, 'width', vjs.Component.prototype.wi
 goog.exportProperty(vjs.Component.prototype, 'height', vjs.Component.prototype.height);
 goog.exportProperty(vjs.Component.prototype, 'dimensions', vjs.Component.prototype.dimensions);
 goog.exportProperty(vjs.Component.prototype, 'ready', vjs.Component.prototype.ready);
+goog.exportProperty(vjs.Component.prototype, 'setLocalStorage', vjs.Component.prototype.setLocalStorage);
 goog.exportProperty(vjs.Component.prototype, 'addClass', vjs.Component.prototype.addClass);
 goog.exportProperty(vjs.Component.prototype, 'removeClass', vjs.Component.prototype.removeClass);
 goog.exportProperty(vjs.Component.prototype, 'buildCSSClass', vjs.Component.prototype.buildCSSClass);
@@ -160,6 +161,9 @@ goog.exportProperty(vjs.TextTrack.prototype, 'kind', vjs.TextTrack.prototype.kin
 goog.exportProperty(vjs.TextTrack.prototype, 'mode', vjs.TextTrack.prototype.mode);
 goog.exportProperty(vjs.TextTrack.prototype, 'cues', vjs.TextTrack.prototype.cues);
 goog.exportProperty(vjs.TextTrack.prototype, 'activeCues', vjs.TextTrack.prototype.activeCues);
+
+goog.exportSymbol('videojs.Resolution', vjs.Resolution);
+goog.exportSymbol('videojs.ResolutionsButton', vjs.ResolutionsButton);
 
 goog.exportSymbol('videojs.CaptionsTrack', vjs.CaptionsTrack);
 goog.exportSymbol('videojs.SubtitlesTrack', vjs.SubtitlesTrack);

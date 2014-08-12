@@ -1157,13 +1157,37 @@ vjs.Player.prototype.exitFullWindow = function(){
   this.trigger('exitFullWindow');
 };
 
+vjs.Player.prototype.bucketByTypes = function(sources){
+  return vjs.reduce(sources, function(init, val, i){
+    (init[val.type] = init[val.type] || []).push(val);
+    return init;
+  }, {}, this);
+};
+
 vjs.Player.prototype.selectSource = function(sources){
 
-  // Loop through each playback technology in the options order
+  var sourcesByType = this.bucketByTypes(sources),
+      typeAndTech = this.selectTypeAndTech(sources);
+
+    if (!typeAndTech) return false;
+
+    // even though we choose the best resolution for the user here, we
+    // should remember the resolutions so that we can potentially
+    // change resolution later
+    this.options_['sourceResolutions'] = sourcesByType[typeAndTech.type];
+
+    return {
+      source: this.selectResolution(this.options_['sourceResolutions']),
+      tech: typeAndTech.tech
+    };
+};
+
+vjs.Player.prototype.selectTypeAndTech = function(sources) {
   for (var i=0,j=this.options_['techOrder'];i<j.length;i++) {
-    var techName = vjs.capitalize(j[i]),
+      var techName = vjs.capitalize(j[i]),
         tech = window['videojs'][techName];
 
+<<<<<<< HEAD
     // Check if the current tech is defined before continuing
     if (!tech) {
       vjs.log.error('The "' + techName + '" tech is undefined. Skipped browser support check for that tech.');
@@ -1179,12 +1203,44 @@ vjs.Player.prototype.selectSource = function(sources){
         // Check if source can be played with this technology
         if (tech['canPlaySource'](source)) {
           return { source: source, tech: techName };
+=======
+      // Check if the browser supports this technology
+      if (tech.isSupported()) {
+        // Loop through each source object
+        for (var a=0,b=sources;a<b.length;a++) {
+          var source = b[a];
+          // Check if source can be played with this technology
+          if (tech['canPlaySource'](source)) {
+            return { type: source.type, tech: techName };
+          }
+>>>>>>> FETCH_HEAD
         }
       }
     }
-  }
+};
 
-  return false;
+vjs.Player.prototype.selectResolution = function(typeSources) {
+  var defaultRes = 0;
+
+  // check to see if any sources are marked as default
+  vjs.obj.each(typeSources, function(s, i){
+    // add the index here so we can reference it later
+    s.index = i;
+
+    if (s['data-default']) defaultRes = i;
+  }, this);
+
+  var maxRes = (typeSources.length - 1),
+    // if the user has previously selected a preference, check if
+    // that preference is available. if not, use the source marked
+    // default
+    preferredRes = parseInt(
+        !!window.localStorage && !!window.localStorage.getItem('videojs_preferred_res') ?
+            window.localStorage.getItem('videojs_preferred_res') :
+            defaultRes, 10) || 0,
+    actualRes = preferredRes > maxRes ? maxRes : preferredRes;
+
+  return typeSources[actualRes];
 };
 
 /**
@@ -1233,7 +1289,24 @@ vjs.Player.prototype.src = function(source){
     // create a source object from the string
     this.src({ src: source });
 
+<<<<<<< HEAD
   // case: Source object { src: '', type: '' ... }
+=======
+      // If this technology is already loaded, set source
+      if (techName == this.techName) {
+        this.src(source); // Passing the source object
+      // Otherwise load this technology with chosen source
+      } else {
+        this.loadTech(techName, source);
+      }
+    } else {
+      this.el_.appendChild(vjs.createEl('p', {
+        innerHTML: this.options()['notSupportedMessage']
+      }));
+      this.triggerReady(); // we could not find an appropriate tech, but let's still notify the delegate that this is it
+    }
+  // Case: Source object { src: '', type: '' ... }
+>>>>>>> FETCH_HEAD
   } else if (source instanceof Object) {
     // check if the source has a type and the loaded tech cannot play the source
     // if there's no type we'll just try the current tech
@@ -1242,8 +1315,18 @@ vjs.Player.prototype.src = function(source){
       // the tech loop to check for a compatible technology
       this.sourceList_([source]);
     } else {
+<<<<<<< HEAD
       this.cache_.src = source.src;
       this.currentType_ = source.type || '';
+=======
+      // Send through tech loop to check for a compatible technology.
+      this.src([source]);
+    }
+  // Case: URL String (http://myvideo...)
+  } else {
+    // Cache for getting last set source
+    this.cache_.src = source;
+>>>>>>> FETCH_HEAD
 
       // wait until the tech is ready to set the source
       this.ready(function(){
@@ -1668,3 +1751,52 @@ vjs.Player.prototype.playbackRate = function(rate) {
 // TODO
 // currentSrcList: the array of sources including other formats and bitrates
 // playList: array of source lists in order of playback
+<<<<<<< HEAD
+=======
+
+/// RequestFullscreen API
+(function(){
+  var prefix, requestFS, div;
+
+  div = document.createElement('div');
+
+  requestFS = {};
+
+  // Current W3C Spec
+  // http://dvcs.w3.org/hg/fullscreen/raw-file/tip/Overview.html#api
+  // Mozilla Draft: https://wiki.mozilla.org/Gecko:FullScreenAPI#fullscreenchange_event
+  // New: https://dvcs.w3.org/hg/fullscreen/raw-file/529a67b8d9f3/Overview.html
+  if (div.cancelFullscreen !== undefined) {
+    requestFS.requestFn = 'requestFullscreen';
+    requestFS.cancelFn = 'exitFullscreen';
+    requestFS.eventName = 'fullscreenchange';
+    requestFS.isFullScreen = 'fullScreen';
+
+  // Webkit (Chrome/Safari) and Mozilla (Firefox) have working implementations
+  // that use prefixes and vary slightly from the new W3C spec. Specifically,
+  // using 'exit' instead of 'cancel', and lowercasing the 'S' in Fullscreen.
+  // Other browsers don't have any hints of which version they might follow yet,
+  // so not going to try to predict by looping through all prefixes.
+  } else {
+
+    if (document.mozCancelFullScreen) {
+      prefix = 'moz';
+      requestFS.isFullScreen = prefix + 'FullScreen';
+    } else {
+      prefix = 'webkit';
+      requestFS.isFullScreen = prefix + 'IsFullScreen';
+    }
+
+    if (div[prefix + 'RequestFullScreen']) {
+      requestFS.requestFn = prefix + 'RequestFullScreen';
+      requestFS.cancelFn = prefix + 'CancelFullScreen';
+    }
+    requestFS.eventName = prefix + 'fullscreenchange';
+  }
+
+  if (document[requestFS.cancelFn]) {
+    vjs.support.requestFullScreen = requestFS;
+  }
+
+})();
+>>>>>>> FETCH_HEAD

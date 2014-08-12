@@ -660,6 +660,21 @@ vjs.Component.prototype.triggerReady = function(){
   }
 };
 
+/* Internal Helpers for Plugins
+============================================================================= */
+
+/**
+ * Add to local storage (may removeable)
+ *
+ * @param {String} Key to add
+ * @param {String} Value to add
+ * @return {vjs.Component}
+ */
+vjs.Component.prototype.setLocalStorage = function(key, value){
+  vjs.setLocalStorage(key, value);
+  return this;
+};
+
 /* Display
 ============================================================================= */
 
